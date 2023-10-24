@@ -9,6 +9,8 @@ class NotifyService < BaseService
     update
     poll
     status
+    # TODO: this probably warrants an email notification
+    relationships_severed
   ).freeze
 
   def call(recipient, type, activity)
@@ -109,7 +111,7 @@ class NotifyService < BaseService
 
   def blocked?
     blocked   = @recipient.unavailable?
-    blocked ||= from_self? && @notification.type != :poll
+    blocked ||= from_self? && @notification.type != :poll && @notification.type != :relationships_severed
 
     return blocked if message? && from_staff?
 

@@ -18,14 +18,11 @@ RSpec.describe SuspendAccountService, type: :service do
       account.suspend!
     end
 
-    it "unmerges from local followers' feeds" do
-      subject
+    it "leaves the “suspended” flag untouched, and unmerges from local followers' feeds", :aggregate_failures do
+      expect { subject }.to_not change(account, :suspended?)
+
       expect(FeedManager.instance).to have_received(:unmerge_from_home).with(account, local_follower)
       expect(FeedManager.instance).to have_received(:unmerge_from_list).with(account, list)
-    end
-
-    it 'does not change the “suspended” flag' do
-      expect { subject }.to_not change(account, :suspended?)
     end
   end
 
@@ -51,7 +48,7 @@ RSpec.describe SuspendAccountService, type: :service do
         remote_follower.follow!(account)
       end
 
-      it 'sends an update actor to followers and reporters' do
+      it 'sends an Update actor activity to followers and reporters' do
         subject
         expect(a_request(:post, remote_follower.inbox_url).with { |req| match_update_actor_request(req, account) }).to have_been_made.once
         expect(a_request(:post, remote_reporter.inbox_url).with { |req| match_update_actor_request(req, account) }).to have_been_made.once
@@ -77,9 +74,14 @@ RSpec.describe SuspendAccountService, type: :service do
         account.follow!(local_followee)
       end
 
-      it 'sends a reject follow' do
+      it 'sends a Reject Follow activity, and records severed relationships', :aggregate_failures do
         subject
+
         expect(a_request(:post, account.inbox_url).with { |req| match_reject_follow_request(req, account, local_followee) }).to have_been_made.once
+
+        severed_relationships = local_followee.severed_relationships.to_a
+        expect(severed_relationships.count).to eq 1
+        expect(severed_relationships.map { |rel| [rel.account, rel.target_account] }).to contain_exactly([account, local_followee])
       end
     end
   end
